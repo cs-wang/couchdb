@@ -17,8 +17,8 @@
 
 -define(CACHE, ddoc_cache_entries).
 -define(LRU, ddoc_cache_lru).
--define(OPENERS, ddoc_cache_openers).
 -define(REFRESH_TIMEOUT, 67000).
+-define(SHUTDOWN_TIMEOUT, 1000).
 
 -record(entry, {
     key,

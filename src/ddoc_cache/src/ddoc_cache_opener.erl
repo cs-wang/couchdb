@@ -14,81 +14,30 @@
 -behaviour(gen_server).
 -vsn(1).
 
--include_lib("couch/include/couch_db.hrl").
--include_lib("mem3/include/mem3.hrl").
-
 -export([
     start_link/0
 ]).
+
 -export([
     init/1,
     terminate/2,
-
     handle_call/3,
     handle_cast/2,
     handle_info/2,
-
     code_change/3
 ]).
 
--export([
-    open/1
-]).
-
--include("ddoc_cache.hrl").
-
-
--record(st, {
-    db_ddocs
-}).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
-open(Key) ->
-    try ets:lookup(?CACHE, Key) of
-        [] ->
-            couch_stats:increment_counter([ddoc_cache, miss]),
-            Resp = gen_server:call(?MODULE, {open, Key}, infinity),
-            ddoc_cache_entry:handle_resp(Resp);
-        [#entry{val = Val}] ->
-            couch_stats:increment_counter([ddoc_cache, hit]),
-            ddoc_cache_lru:accessed(Key),
-            {ok, Val}
-    catch _:_ ->
-            couch_stats:increment_counter([ddoc_cache, recovery]),
-            ddoc_cache_entry:open(Key)
-    end.
-
-
 init(_) ->
-    process_flag(trap_exit, true),
-    {ok, #st{}}.
+    {ok, nil}.
 
 terminate(_Reason, _St) ->
     ok.
 
-handle_call({open, OpenerKey}, From, St) ->
-    case ets:lookup(?CACHE, OpenerKey) of
-        [] ->
-            case ets:lookup(?OPENERS, OpenerKey) of
-                [#opener{clients=Clients}=O] ->
-                    ets:insert(?OPENERS, O#opener{clients=[From | Clients]}),
-                    {noreply, St};
-                [] ->
-                    Pid = ddoc_cache_entry:spawn_opener(OpenerKey),
-                    Opener = #opener{
-                        key = OpenerKey,
-                        pid = Pid,
-                        clients = [From]
-                    },
-                    ets:insert(?OPENERS, Opener),
-                    {noreply, St}
-            end;
-        [#entry{val = Val}] ->
-            {reply, {ok, Val}, St}
-    end;
 
 handle_call(Msg, _From, St) ->
     {stop, {invalid_call, Msg}, {invalid_call, Msg}, St}.
@@ -108,33 +57,9 @@ handle_cast(Msg, St) ->
     {stop, {invalid_cast, Msg}, St}.
 
 
-handle_info({'EXIT', _Pid, {open_ok, OpenerKey, Resp}}, St) ->
-    respond(OpenerKey, {open_ok, OpenerKey, Resp}),
-    {noreply, St};
-
-handle_info({'EXIT', _Pid, {open_error, OpenerKey, Type, Reason, Stack}}, St) ->
-    respond(OpenerKey, {open_error, OpenerKey, Type, Reason, Stack}),
-    {noreply, St};
-
-handle_info({'EXIT', Pid, Reason}, St) ->
-    Pattern = #opener{pid=Pid, _='_'},
-    case ets:match_object(?OPENERS, Pattern) of
-        [#opener{key=OpenerKey, clients=Clients}] ->
-            [gen_server:reply(C, {error, Reason}) || C <- Clients],
-            ets:delete(?OPENERS, OpenerKey),
-            {noreply, St};
-        [] ->
-            {stop, {unknown_pid_died, {Pid, Reason}}, St}
-    end;
-
 handle_info(Msg, St) ->
     {stop, {invalid_info, Msg}, St}.
 
+
 code_change(_OldVsn, State, _Extra) ->
     {ok, State}.
-
-
-respond(OpenerKey, Resp) ->
-    [#opener{clients=Clients}] = ets:lookup(?OPENERS, OpenerKey),
-    [gen_server:reply(C, Resp) || C <- Clients],
-    ets:delete(?OPENERS, OpenerKey).

@@ -24,27 +24,16 @@ coverage_test_() ->
         fun ddoc_cache_tutil:start_couch/0,
         fun ddoc_cache_tutil:stop_couch/1,
         [
-            fun restart_opener/0,
             fun restart_lru/0,
             fun restart_tables/0,
-            fun restart_evictor/0,
-            fun lru_ignores_unknown_keys/0
+            fun restart_evictor/0
         ]
     }.
 
 
-restart_opener() ->
-    send_bad_messages(ddoc_cache_opener),
-    wait_for_restart(ddoc_cache_opener, fun() ->
-        whereis(ddoc_cache_opener) ! {'EXIT', a_pid, because}
-    end),
-    ?assertEqual(ok, ddoc_cache_opener:terminate(bang, bable)),
-    ?assertEqual({ok, foo}, ddoc_cache_opener:code_change(1, foo, [])).
-
-
 restart_lru() ->
     send_bad_messages(ddoc_cache_lru),
-    ?assertEqual(ok, ddoc_cache_lru:terminate(bang, {st, a, b, c, d})),
+    ?assertEqual(ok, ddoc_cache_lru:terminate(bang, {st, a, b, c})),
     ?assertEqual({ok, foo}, ddoc_cache_lru:code_change(1, foo, [])).
 
 
@@ -58,7 +47,7 @@ restart_evictor() ->
     meck:new(ddoc_cache_ev, [passthrough]),
     try
         State = sys:get_state(ddoc_cache_lru),
-        Evictor = element(5, State),
+        Evictor = element(4, State),
         Ref = erlang:monitor(process, Evictor),
         exit(Evictor, shutdown),
         receive
@@ -68,20 +57,11 @@ restart_evictor() ->
         end,
         meck:wait(ddoc_cache_ev, event, [evictor_died, '_'], 1000),
         NewState = sys:get_state(ddoc_cache_lru),
-        NewEvictor = element(5, NewState),
+        NewEvictor = element(4, NewState),
         ?assertNotEqual(Evictor, NewEvictor)
     after
         meck:unload()
     end.
-
-
-lru_ignores_unknown_keys() ->
-    ?assertEqual(evicted, gen_server:call(ddoc_cache_lru, {update, foo, bar})),
-    ?assertEqual(ok, gen_server:call(ddoc_cache_lru, {remove, foo})),
-    Pid = whereis(ddoc_cache_lru),
-    gen_server:cast(ddoc_cache_lru, {accessed, foo}),
-    timer:sleep(200),
-    ?assert(is_process_alive(Pid)).
 
 
 send_bad_messages(Name) ->

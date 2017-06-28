@@ -6,7 +6,7 @@
 ]).
 
 
--define(RANGE, 1000).
+-include("ddoc_cache.hrl").
 
 
 go(WorkerCount) when is_integer(WorkerCount), WorkerCount > 0 ->
@@ -24,7 +24,7 @@ spawn_workers(0) ->
 spawn_workers(WorkerCount) ->
     Self = self(),
     WorkerDb = list_to_binary(integer_to_list(WorkerCount)),
-    spawn(fun() ->
+    spawn_link(fun() ->
         do_work(Self, WorkerDb, 0)
     end),
     spawn_workers(WorkerCount - 1).
@@ -48,7 +48,10 @@ report(Start, Count) ->
     case timer:now_diff(Now, Start) of
         N when N > 1000000 ->
             {_, MQL} = process_info(whereis(ddoc_cache_lru), message_queue_len),
-            io:format("~p ~p~n", [Count, MQL]),
+            ProcCount = erlang:system_info(process_count),
+            CacheSize = ets:info(?CACHE, size),
+            LRUSize = ets:info(?LRU, size),
+            io:format("~p ~p ~p ~p ~p~n", [Count, MQL, ProcCount, CacheSize, LRUSize]),
             report(Now, 0);
         _ ->
             receive

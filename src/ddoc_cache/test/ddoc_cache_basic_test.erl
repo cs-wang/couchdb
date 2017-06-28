@@ -105,8 +105,9 @@ cache_ddoc_refresher_unchanged({DbName, _}) ->
 
 
 dont_cache_not_found({DbName, _}) ->
+    DDocId = <<"_design/not_found">>,
     ddoc_cache_tutil:clear(),
-    Resp = ddoc_cache:open_doc(DbName, <<"_design/not_found">>),
+    Resp = ddoc_cache:open_doc(DbName, DDocId),
     ?assertEqual({not_found, missing}, Resp),
     ?assertEqual(0, ets:info(?CACHE, size)),
     ?assertEqual(0, ets:info(?LRU, size)).

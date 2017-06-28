@@ -44,8 +44,7 @@ init(_) ->
         {keypos, #entry.key}
     ] ++ BaseOpts,
     ets:new(?CACHE, CacheOpts),
-    ets:new(?LRU, [ordered_set] ++ BaseOpts),
-    ets:new(?OPENERS, [set, {keypos, #opener.key}] ++ BaseOpts),
+    ets:new(?LRU, [ordered_set, {write_concurrency, true}] ++ BaseOpts),
     {ok, nil}.
 
 

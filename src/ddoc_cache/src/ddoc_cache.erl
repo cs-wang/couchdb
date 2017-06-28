@@ -27,22 +27,22 @@
 
 open_doc(DbName, DocId) ->
     Key = {ddoc_cache_entry_ddocid, {DbName, DocId}},
-    ddoc_cache_opener:open(Key).
+    ddoc_cache_lru:open(Key).
 
 
 open_doc(DbName, DocId, RevId) ->
     Key = {ddoc_cache_entry_ddocid_rev, {DbName, DocId, RevId}},
-    ddoc_cache_opener:open(Key).
+    ddoc_cache_lru:open(Key).
 
 
 open_validation_funs(DbName) ->
     Key = {ddoc_cache_entry_validation_funs, DbName},
-    ddoc_cache_opener:open(Key).
+    ddoc_cache_lru:open(Key).
 
 
 open_custom(DbName, Mod) ->
     Key = {ddoc_cache_entry_custom, {DbName, Mod}},
-    ddoc_cache_opener:open(Key).
+    ddoc_cache_lru:open(Key).
 
 
 refresh(ShardDbName, DDocIds) when is_list(DDocIds) ->

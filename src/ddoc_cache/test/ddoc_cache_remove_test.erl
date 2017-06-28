@@ -95,7 +95,7 @@ remove_ddoc_rev({DbName, _}) ->
         do_compact(Shard#shard.name)
     end, mem3:local_shards(DbName)),
     % Trigger a refresh rather than wait for the timeout
-    ddoc_cache_refresher:refresh(Pid),
+    ddoc_cache_entry:refresh(Pid),
     meck:wait(ddoc_cache_ev, event, [removed, Key], 1000),
     ?assertMatch(
             {{not_found, missing}, _},
@@ -127,8 +127,8 @@ remove_ddoc_rev_only({DbName, _}) ->
         do_compact(Shard#shard.name)
     end, mem3:local_shards(DbName)),
     % Trigger a refresh rather than wait for the timeout
-    ddoc_cache_refresher:refresh(NoRevPid),
-    ddoc_cache_refresher:refresh(RevPid),
+    ddoc_cache_entry:refresh(NoRevPid),
+    ddoc_cache_entry:refresh(RevPid),
     meck:wait(ddoc_cache_ev, event, [update_noop, NoRevKey], 1000),
     meck:wait(ddoc_cache_ev, event, [removed, RevKey], 1000),
     ?assertMatch({ok, _}, ddoc_cache:open_doc(DbName, ?VDU)),

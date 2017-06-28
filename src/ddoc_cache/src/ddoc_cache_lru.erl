@@ -55,19 +55,19 @@ start_link() ->
 
 
 insert(Key, Val) ->
-    gen_server:call(?MODULE, {insert, Key, Val}).
+    gen_server:call(?MODULE, {insert, Key, Val}, infinity).
 
 
 accessed(Key) ->
-    gen_server:cast(?MODULE, {accessed, Key}).
+    gen_server:call(?MODULE, {accessed, Key}).
 
 
 update(Key, Val) ->
-    gen_server:call(?MODULE, {update, Key, Val}).
+    gen_server:call(?MODULE, {update, Key, Val}, infinity).
 
 
 remove(Key) ->
-    gen_server:call(?MODULE, {remove, Key}).
+    gen_server:call(?MODULE, {remove, Key}, infinity).
 
 
 refresh(DbName, DDocIds) ->
@@ -107,11 +107,15 @@ handle_call({insert, Key, Val}, _From, St) ->
     NewSt = St#st{time = NewTime},
     Pid = ddoc_cache_refresher:spawn_link(Key, ?REFRESH_TIMEOUT),
     true = ets:insert(?CACHE, #entry{key = Key, val = Val, pid = Pid}),
-    true = ets:insert(?LRU, {NewTime, Key}),
+    true = ets:insert(?LRU, {{NewTime, Key}}),
     ok = khash:put(ATimes, Key, NewTime),
     store_key(Dbs, Key),
     trim(NewSt),
     ?EVENT(inserted, {Key, Val}),
+    {reply, ok, NewSt};
+
+handle_call({accessed, Key}, _From, St) ->
+    {noreply, NewSt} = handle_cast({accessed, Key}, St),
     {reply, ok, NewSt};
 
 handle_call({update, Key, Val}, _From, St) ->
@@ -170,10 +174,8 @@ handle_cast({accessed, Key}, St) ->
     NewTime = Time + 1,
     case khash:lookup(ATimes, Key) of
         {value, OldTime} ->
-            [#entry{pid = Pid}] = ets:lookup(?CACHE, Key),
-            true = is_process_alive(Pid),
-            true = ets:delete(?LRU, OldTime),
-            true = ets:insert(?LRU, {NewTime, Key}),
+            true = ets:delete(?LRU, {OldTime, Key}),
+            true = ets:insert(?LRU, {{NewTime, Key}}),
             ok = khash:put(ATimes, Key, NewTime),
             ?EVENT(accessed, Key);
         not_found ->
@@ -297,7 +299,7 @@ remove_key(St, Key, ATime) ->
         atimes = ATimes
     } = St,
     true = ets:delete(?CACHE, Key),
-    true = ets:delete(?LRU, ATime),
+    true = ets:delete(?LRU, {ATime, Key}),
     ok = khash:del(ATimes, Key).
 
 
@@ -305,10 +307,10 @@ trim(St) ->
     #st{
         atimes = ATimes
     } = St,
-    MaxSize = max(0, config:get_integer("ddoc_cache", "max_size", 1000)),
+    MaxSize = max(0, config:get_integer("ddoc_cache", "max_size", 5000)),
     case khash:size(ATimes) > MaxSize of
         true ->
-            [{ATime, Key}] = ets:lookup(?LRU, ets:first(?LRU)),
+            {ATime, Key} = ets:first(?LRU),
             remove_key(St, Key, ATime),
             trim(St);
         false ->
